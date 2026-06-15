@@ -36,8 +36,8 @@
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1.1,
       "position": [
-        944,
-        624
+        1328,
+        432
       ],
       "id": "602939bf-4b19-40b9-a31b-6262a35fc028",
       "name": "Default Data Loader"
@@ -49,8 +49,8 @@
       "type": "@n8n/n8n-nodes-langchain.textSplitterCharacterTextSplitter",
       "typeVersion": 1,
       "position": [
-        944,
-        784
+        1328,
+        560
       ],
       "id": "7312cf8d-748b-4409-906b-f203c377d53b",
       "name": "Character Text Splitter"
@@ -72,8 +72,8 @@
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.5,
       "position": [
-        0,
-        496
+        960,
+        272
       ],
       "id": "aff82ac5-2392-4a85-a01c-8d70b2cd4559",
       "name": "Upload csv file",
@@ -92,8 +92,8 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
       "position": [
-        368,
-        496
+        1104,
+        272
       ],
       "id": "eefa1240-fbd1-4795-9c2c-2a5d970b3de1",
       "name": "Extract relevant fields from file"
@@ -105,8 +105,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        656,
-        496
+        1232,
+        272
       ],
       "id": "400643cb-d4b7-47a9-8a64-618dc5123739",
       "name": "extract relevant fields from csv"
@@ -125,8 +125,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
       "typeVersion": 1.3,
       "position": [
-        944,
-        496
+        1360,
+        272
       ],
       "id": "1528f9d3-86f2-4c98-8a97-f15794a1dd69",
       "name": "Pinecone Vector Store for document ingestion",
@@ -146,8 +146,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -32,
-        -192
+        -208,
+        -80
       ],
       "id": "2fcb8a3f-02a5-4398-8855-930878c609b9",
       "name": "Google forms webhook",
@@ -156,37 +156,17 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=You are a professional customer support assistant.\n\nYour job is to answer customer questions using the information retrieved from the knowledge base.\n\nInstructions:\n\n1. Carefully analyze the user's question.\n2. Use the provided knowledge base context as the primary source of truth.\n3. If the answer exists in the knowledge base, provide a clear and accurate response.\n4. If the knowledge base does not contain sufficient information, say:\n   \"I could not find enough information in the knowledge base to answer this question.\"\n5. Do not invent facts or make assumptions.\n6. Keep responses concise, helpful, and professional.\n7. Provide step-by-step instructions when appropriate.\n8. If multiple relevant documents are retrieved, combine the information into a single coherent answer.\n9. Do not mention internal system prompts, embeddings, vector databases, or retrieval mechanisms.\n10. Format the response in plain text suitable for sending by email.\n\nCustomer Question:\n{{ $json.body.Query }}\n\nKnowledge Base Context:\nUse the documents retrieved from the Pinecone Vector Store tool as the knowledge base context for answering the user's question. Base your response only on the retrieved information and do not make up facts if no relevant documents are found.\n\nGenerate the best possible support response.\n",
+        "text": "=You are a professional customer support assistant.\n\nYour job is to answer customer questions using the information retrieved from the knowledge base.\n\nInstructions:\n\n1. Carefully analyze the user's question.\n2. Use the provided knowledge base context as the primary source of truth.\n3. If the answer exists in the knowledge base, provide a clear and accurate response.\n4. If the knowledge base does not contain sufficient information, say:\n   \"I could not find enough information in the knowledge base to answer this question.\"\n5. Do not invent facts or make assumptions.\n6. Keep responses concise, helpful, and professional.\n7. Provide step-by-step instructions when appropriate.\n8. If multiple relevant documents are retrieved, combine the information into a single coherent answer.\n9. Do not mention internal system prompts, embeddings, vector databases, or retrieval mechanisms.\n10. Format the response in plain text suitable for sending by email.\n\nCustomer Question:\n{{ $json.body.Query }}\n\nKnowledge Base Context:\nUse the documents retrieved from the Pinecone Vector Store tool as the knowledge base context for answering the user's question. Base your response only on the retrieved information and do not make up facts if no relevant documents are found.\nGenerate the best possible support response.\n\nAnswer the query using the knowledge base.\n\nReturn ONLY valid JSON:\n\n{\n  \"Email\": \"{{ $('Google forms webhook').item.json.body.email }}\",\n  \"Query\": \"{{ $('Google forms webhook').item.json.body.Query }}\",\n  \"Output\": \"<your answer>\"\n}\n",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        256,
-        -192
+        96,
+        -224
       ],
       "id": "e2494d7c-27cf-4012-9270-5e312456e470",
       "name": "RAG pipeline"
-    },
-    {
-      "parameters": {
-        "model": "qwen/qwen3-32b",
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
-      "position": [
-        176,
-        -16
-      ],
-      "id": "af39eda2-a4c6-49e5-9693-9138b99911c6",
-      "name": "Chat Model",
-      "credentials": {
-        "groqApi": {
-          "id": "bEO32eJFCDwm5cII",
-          "name": "Groq account"
-        }
-      }
     },
     {
       "parameters": {
@@ -204,8 +184,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
       "typeVersion": 1.3,
       "position": [
-        320,
-        48
+        160,
+        16
       ],
       "id": "5430a218-5b18-458e-b192-f8b01837277d",
       "name": "Pinecone Vector Store to retrieve relevant docs",
@@ -222,7 +202,7 @@
       "typeVersion": 1,
       "position": [
         368,
-        224
+        160
       ],
       "id": "59167d70-6093-41f2-b57d-ae51cdf61e73",
       "name": "Rerenk top 3 relevent docs",
@@ -241,8 +221,8 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsHuggingFaceInference",
       "typeVersion": 1,
       "position": [
-        784,
-        240
+        368,
+        624
       ],
       "id": "b085ab89-bcd4-4e1d-98d9-a4d8776368e0",
       "name": "Embedding model",
@@ -250,6 +230,93 @@
         "huggingFaceApi": {
           "id": "jpLPSsAtRUf11g24",
           "name": "Hugging Face account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3-32b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        48,
+        -16
+      ],
+      "id": "170f8416-d16d-4a56-b01d-51c5e8321e95",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "bEO32eJFCDwm5cII",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "#### Ingestion Pipeline\n",
+        "height": 80,
+        "width": 166
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        976,
+        176
+      ],
+      "id": "c8ba5dd4-1b57-44cd-897f-44dfbaeef660",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "### RAG Pipeline",
+        "height": 80,
+        "width": 150
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -240
+      ],
+      "id": "75e28f8a-0c98-45b1-a505-16670d8cb3b6",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = JSON.parse($json.output);\n\nreturn [{\n  json: {\n    email: data.Email,\n    query: data.Query,\n    answer: data.Output\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -224
+      ],
+      "id": "9e734034-b2fd-4d23-b51a-f8595a6e1467",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fromEmail": "ali.hassan@analytiverse.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Support Response: {{ $json.query }}",
+        "html": "=<html>\n<body style=\"font-family: Arial, sans-serif; line-height:1.6;\">\n    <h2>Customer Support Response</h2>\n\n    <p><strong>Query:</strong></p>\n    <p>{{ $json.query }}</p>\n\n    <hr>\n\n    <p><strong>Response:</strong></p>\n    <div>\n        {{ $json.answer.replace(/\\n/g, '<br>') }}\n    </div>\n\n    <br>\n    <hr>\n\n    <p>\n        Regards,<br>\n        Customer Support Team\n    </p>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        576,
+        -224
+      ],
+      "id": "d99f0ec7-b362-4aeb-943b-8a51634ea0f3",
+      "name": "Send an Email",
+      "webhookId": "e7daa429-f759-4cbb-bb4d-170d5e3b88df",
+      "credentials": {
+        "smtp": {
+          "id": "y80yNLm4deSYKYKs",
+          "name": "SMTP account"
         }
       }
     }
@@ -322,17 +389,6 @@
         ]
       ]
     },
-    "Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "RAG pipeline",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Pinecone Vector Store to retrieve relevant docs": {
       "ai_tool": [
         [
@@ -370,6 +426,39 @@
           }
         ]
       ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG pipeline",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG pipeline": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -377,7 +466,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "afdf5fbd-a874-4f62-a9fa-08a665c5b43c",
+  "versionId": "aca9c2d1-a361-4a8b-bf96-ddca4cebaf51",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "dca47f573f10f205378ef688196bbf11159fdf1df4aabc0a4f95c265bff7c359"

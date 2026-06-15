@@ -107,7 +107,7 @@ Create an index in the Pinecone console **before** ingesting data:
 
 A ready-made n8n workflow export (`RAG Workflow.json`) is available for download. Import it into n8n to get the ingestion and chat pipelines pre-wired, then attach your own credentials.
 
-**[Download RAG Workflow.json (Google Drive)](https://drive.google.com/file/d/1dJ6OdfAlFp8ziWUHVAIfPEUhlb0ExvUU/view?usp=sharing)**
+**[Download RAG Workflow.json (Google Drive)](https://drive.google.com/file/d/18zXZqNQU4VsijJ3nZYlMTBY8gZXecLN5/view?usp=sharing)**
 
 ### How to import
 
