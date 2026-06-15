@@ -21,6 +21,8 @@ A step-by-step guide to building a **Retrieval-Augmented Generation (RAG)** pipe
 11. [Testing](#testing)
 12. [Troubleshooting](#troubleshooting)
 
+Workflow 3 also includes: parse AI output (Step 14) → send email via SMTP (Steps 15–16).
+
 ---
 
 ## What is n8n?
@@ -67,6 +69,7 @@ This guide uses **two separate workflows**:
 - **n8n** installed locally (`n8n start` or Docker)
 - **Node.js** (if running n8n via npm)
 - **ngrok** (optional — to expose local webhooks to the internet)
+- **SMTP mail account** (e.g. Gmail with App Password) — to email support responses to the user
 
 ### Dataset
 
@@ -158,6 +161,7 @@ Responses contain placeholder tokens like `{{Order Number}}` and `{{Website URL}
 │               └── Pinecone (Retrieve Tool)                   │
 │                        ├── HF Embeddings (same model)        │
 │                        └── Cohere Reranker                   │
+│  AI Agent → Code (parse JSON) → SMTP (email response)        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -309,7 +313,7 @@ If you see `blobType`, `line`, or `source: blob`, the Default Data Loader is mis
 
 This workflow answers user questions by searching Pinecone and generating a response with Groq.
 
-![RAG and Chat workflow with Groq, Pinecone, Hugging Face, and Cohere](https://github.com/AliHassanSandhu/Rag-n8n/blob/main/screenshots/rag-and-chat-workflow.png)
+![RAG and Chat workflow — Google Form, AI Agent, Code, and SMTP email response](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/rag.png)
 
 ### Step 8: Webhook Trigger (Google Forms)
 
@@ -345,9 +349,10 @@ https://YOUR-SUBDOMAIN.ngrok-free.dev/webhook/03993e47-689e-4970-a743-3a825ca322
 #### 8.2 — Create the Google Form
 
 1. Go to [Google Forms](https://forms.google.com/) and create a new form.
-2. Add a **Short answer** question for the user's support question, e.g. title: **`Question`** or **`Your support question`**.
-3. (Optional) Add more fields (name, email, category).
-4. Click **Send** → link icon → copy the form URL for testers.
+2. Add a **Short answer** question titled **`Email`** (for the reply address).
+3. Add a **Short answer** question for the support query, e.g. title: **`Question`** or **`Query`**.
+4. (Optional) Add more fields (name, category).
+5. Click **Send** → link icon → copy the form URL for testers.
 
 Remember the **exact question titles** — Apps Script uses them as JSON keys.
 
@@ -398,6 +403,7 @@ Example payload sent to n8n (keys match your form question titles):
 
 ```json
 {
+  "Email": "user@example.com",
   "Question": "How do I cancel my order?"
 }
 ```
@@ -491,6 +497,8 @@ Add **AI Agent** and connect the Webhook.
 
 **System message example:**
 
+Configure the AI Agent to return a **JSON object** (as a string in the `output` field) so the next Code node can parse it and send an email.
+
 ```
 You are a customer support assistant.
 
@@ -500,7 +508,16 @@ When a user asks a question:
 3. Be concise and friendly.
 4. If nothing relevant is found, say you don't know and offer human support.
 5. Do not invent policies, phone numbers, or URLs.
+
+Return your final answer ONLY as valid JSON with these exact keys:
+{
+  "Email": "<user email from the form>",
+  "Query": "<user question>",
+  "Output": "<your support answer>"
+}
 ```
+
+Ensure the Google Form includes an **Email** field — Apps Script sends it in the webhook payload alongside **Question** (or your query field title).
 
 ### Step 10: Groq Chat Model (required)
 
@@ -547,15 +564,114 @@ Reranking reorders Pinecone's initial results so the AI Agent receives the most 
 
 For multi-turn conversations, connect **Window Buffer Memory** to the Memory port. Skip for single-question webhooks.
 
+### Step 14: AI Agent output format
+
+After the AI Agent runs, n8n returns output in this structure:
+
+```json
+[
+  {
+    "output": "{
+  "Email": "asd@gmail.com",
+  "Query": "How to cancel order",
+  "Output": "To cancel an order: 1. Log into your account. 2. Navigate to the 'Order Details' page. 3. Click the 'Cancel Order' button if available for your order. 4. If cancellation is not possible, contact our support team at support@example.com with your order number for assistance."
+}"
+  }
+]
+```
+
+The `output` field is a **JSON string** (not a parsed object). The next Code node parses it into separate fields for the email node.
+
+> **Tip:** In the AI Agent system prompt, require JSON with keys `Email`, `Query`, and `Output` so parsing is reliable. Match key names to what your Google Form sends (e.g. form field title `Email` → `"Email"` in JSON).
+
+### Step 15: Code node — parse AI output
+
+Add a **Code** node after the AI Agent. Set mode to **Run once for each item**.
+
+```javascript
+const data = JSON.parse($json.output);
+
+return [{
+  json: {
+    email: data.Email,
+    query: data.Query,
+    answer: data.Output
+  }
+}];
+```
+
+| Input field | Output field | Used by |
+|-------------|--------------|---------|
+| `output` (JSON string) | `email`, `query`, `answer` | SMTP node |
+
+If parsing fails, check the AI Agent execution log — the model may have returned markdown or extra text around the JSON. Tighten the system prompt to **JSON only**.
+
+### Step 16: SMTP — email the support response
+
+Add an **Send Email (SMTP)** node after the Code node to deliver the answer to the user.
+
+![SMTP node configuration for customer support email response](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/smtp-email-node.png)
+
+| Setting | Value |
+|---------|--------|
+| **Credential** | SMTP account (Gmail, Outlook, or your mail provider) |
+| **To Email** | `={{ $json.email }}` |
+| **Subject** | `Support Response: {{ $json.query }}` |
+| **Email Format** | HTML |
+| **HTML** | See template below |
+
+**HTML body template** (paste into the SMTP node **HTML** field):
+
+```html
+<html>
+<body style="font-family: Arial, sans-serif; line-height:1.6;">
+    <h2>Customer Support Response</h2>
+
+    <p><strong>Query:</strong></p>
+    <p>{{ $json.query }}</p>
+
+    <hr>
+
+    <p><strong>Response:</strong></p>
+    <div>
+        {{ $json.answer.replace(/\n/g, '<br>') }}
+    </div>
+
+    <br>
+    <hr>
+
+    <p>
+        Regards,<br>
+        Customer Support Team
+    </p>
+</body>
+</html>
+```
+
+The `.replace(/\n/g, '<br>')` expression converts line breaks in the AI answer into HTML `<br>` tags so multi-step responses render correctly in the email.
+
+#### SMTP credential setup (Gmail example)
+
+1. In n8n → **Credentials** → **SMTP** → create new.
+2. **User:** your Gmail address.
+3. **Password:** a [Google App Password](https://myaccount.google.com/apppasswords) (not your regular Gmail password).
+4. **Host:** `smtp.gmail.com` | **Port:** `465` | **SSL/TLS:** ON.
+
+Test the SMTP node alone with hardcoded `To Email` before connecting the full pipeline.
+
 ### Canvas Summary
 
 ```
-Webhook → AI Agent
-              ├── Chat Model      → Groq Chat Model
-              ├── Tool            → Pinecone (Retrieve as Tool)
-              │                         ├── Embeddings HF (same model)
-              │                         └── Cohere Reranker
-              └── Memory            → Window Buffer Memory (optional)
+Google Form → Apps Script → ngrok → Webhook → AI Agent
+                                                  ├── Chat Model      → Groq Chat Model
+                                                  ├── Tool            → Pinecone (Retrieve as Tool)
+                                                  │                         ├── Embeddings HF
+                                                  │                         └── Cohere Reranker
+                                                  └── Memory            → Window Buffer Memory (optional)
+                                        ↓
+                                   Code (parse JSON output)
+                                        ↓
+                                   SMTP (email response)
 ```
 
 ---
@@ -624,9 +740,12 @@ https://borrowing-suds-unharmed.ngrok-free.dev
 
 ```json
 {
+  "Email": "user@example.com",
   "Question": "How do I cancel my order?"
 }
 ```
+
+**Option 3 — Verify email:** After the run completes, check the SMTP node execution and the recipient inbox for the HTML email with query and answer.
 
 **Expected retrieval** — documents with full metadata:
 
@@ -714,7 +833,7 @@ n8n start
 | Workflow | Nodes |
 |----------|-------|
 | **Upsert** | Form → Extract CSV → Code → Pinecone Insert + HF Embeddings + Default Data Loader |
-| **Query** | Google Form → Apps Script → ngrok → Webhook → AI Agent + Groq Chat + Pinecone Retrieve Tool + HF Embeddings + Cohere Reranker |
+| **Query** | Google Form → Apps Script → ngrok → Webhook → AI Agent → Code (parse) → SMTP email + Groq + Pinecone + HF Embeddings + Cohere |
 
 ---
 
