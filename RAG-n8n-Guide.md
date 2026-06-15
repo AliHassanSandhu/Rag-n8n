@@ -659,6 +659,14 @@ The `.replace(/\n/g, '<br>')` expression converts line breaks in the AI answer i
 
 Test the SMTP node alone with hardcoded `To Email` before connecting the full pipeline.
 
+#### Example output — email received by the user
+
+After a successful run (Google Form → AI Agent → Code → SMTP), the user receives an HTML email like this:
+
+![Example customer support email response sent automatically via n8n SMTP](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/email-response.jpeg)
+
+The email shows the original **Query**, the AI-generated **Response** (grounded in Pinecone retrieval), and the **Customer Support Team** sign-off. The footer `This email was sent automatically with n8n` is added by n8n when using the SMTP node.
+
 ### Canvas Summary
 
 ```
