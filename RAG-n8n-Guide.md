@@ -230,7 +230,6 @@ Connect the Code node output to **Pinecone Vector Store** in **Insert Documents*
 
 ![Ingestion Pipeline workflow](https://github.com/AliHassanSandhu/Rag-n8n/blob/main/screenshots/ingestion-pipeline.png)
 
-
 ### Step 4: Embeddings HuggingFace Inference
 
 Add **Embeddings HuggingFace Inference** and connect it to the **Embedding** port on Pinecone.
