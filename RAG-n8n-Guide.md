@@ -1,8 +1,15 @@
 # Building a RAG Customer Support Bot in n8n
 
-A step-by-step guide to building a **Retrieval-Augmented Generation (RAG)** pipeline in n8n using the Bitext Customer Support dataset, Pinecone, Hugging Face embeddings, Groq chat, and Cohere reranking.
+A step-by-step guide to building **Retrieval-Augmented Generation (RAG)** pipelines in n8n using the Bitext Customer Support dataset. This guide covers two query approaches:
 
-> **Viewing this guide:** Workflow screenshots are **embedded inline** (base64 data URLs) so they render in online Markdown viewers without local file paths. If your platform blocks embedded images (e.g. GitHub), push the `screenshots/` folder to a repo and use hosted URLs such as `https://raw.githubusercontent.com/<user>/<repo>/main/screenshots/upload-and-process-csv.png`.
+| Approach | Retrieval | Best for |
+|----------|-----------|----------|
+| **Vanilla RAG with Semantic Retrieval** | Pinecone vector search only | Simpler setup, LangChain AI Agent |
+| **Hybrid RAG (BM25 + Semantic)** | Pinecone + Supabase BM25, fused with RRF + Cohere rerank | Keyword-heavy queries, exact term matches |
+
+Both share the same **ingestion** workflow (CSV → Pinecone). Hybrid adds a **Supabase full-text search** index for BM25-style retrieval.
+
+> **Viewing this guide:** Screenshots live in `screenshots/` and `screenshots/hybrid/`. On GitHub, use raw URLs such as `https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/rag-hybrid-pipeline.png`.
 
 ---
 
@@ -16,12 +23,13 @@ A step-by-step guide to building a **Retrieval-Augmented Generation (RAG)** pipe
 6. [Architecture Overview](#architecture-overview)
 7. [Workflow 1 — Upload and Process CSV](#workflow-1--upload-and-process-csv)
 8. [Workflow 2 — Ingestion Pipeline (Upsert to Pinecone)](#workflow-2--ingestion-pipeline-upsert-to-pinecone)
-9. [Workflow 3 — RAG Chat Pipeline](#workflow-3--rag-chat-pipeline)
-10. [Expose Your Workflow with ngrok](#expose-your-workflow-with-ngrok)
-11. [Testing](#testing)
-12. [Troubleshooting](#troubleshooting)
+9. [Workflow 3 — Vanilla RAG with Semantic Retrieval](#workflow-3--vanilla-rag-with-semantic-retrieval)
+10. [Workflow 4 — Hybrid RAG (BM25 + Semantic)](#workflow-4--hybrid-rag-bm25--semantic)
+11. [Expose Your Workflow with ngrok](#expose-your-workflow-with-ngrok)
+12. [Testing](#testing)
+13. [Troubleshooting](#troubleshooting)
 
-Workflow 3 also includes: parse AI output (Step 14) → send email via SMTP (Steps 15–16).
+Workflow 3 (vanilla) uses an AI Agent → parse JSON → SMTP. Workflow 4 (hybrid) uses parallel retrieval → RRF → Cohere → LLM Chain → SMTP.
 
 ---
 
@@ -53,12 +61,13 @@ For customer support, RAG lets a chatbot answer from your real Q&A data instead 
 User question → Embed query → Search Pinecone → Retrieve top matches → LLM answers using retrieved responses
 ```
 
-This guide uses **two separate workflows**:
+This guide uses **one ingestion workflow** and **two query options**:
 
 | Workflow | Purpose |
 |----------|---------|
-| **Ingestion (upsert)** | Load CSV → embed → store in Pinecone (run once or on schedule) |
-| **Chat (query)** | Receive user question → search Pinecone → generate answer |
+| **Ingestion (upsert)** | Load CSV → embed → store in Pinecone (and Supabase for hybrid) |
+| **Vanilla query** | Webhook → AI Agent → Pinecone semantic search → Groq → email |
+| **Hybrid query** | Webhook → parallel Pinecone + Supabase BM25 → RRF → Cohere rerank → Groq → email |
 
 ---
 
@@ -87,6 +96,7 @@ Create accounts and obtain the following keys. Store them in n8n **Credentials**
 | `huggingface_api_key` | [Hugging Face](https://huggingface.co/settings/tokens) | Embedding model — convert text to vectors |
 | `cohere_api_key` | [Cohere](https://dashboard.cohere.com/) | Reranker — reorder Pinecone results for better relevance |
 | `ngrok_api_key` | [ngrok](https://ngrok.com/) | Tunnel — expose local n8n webhooks publicly |
+| Supabase service role key | [Supabase](https://supabase.com/) | BM25 full-text search (hybrid workflow only) |
 
 ### Pinecone Index
 
@@ -105,9 +115,14 @@ Create an index in the Pinecone console **before** ingesting data:
 
 ## Download n8n Workflow
 
-A ready-made n8n workflow export (`RAG Workflow.json`) is available for download. Import it into n8n to get the ingestion and chat pipelines pre-wired, then attach your own credentials.
+Ready-made n8n workflow exports are available for import:
 
-**[Download RAG Workflow.json (Google Drive)](https://drive.google.com/file/d/18zXZqNQU4VsijJ3nZYlMTBY8gZXecLN5/view?usp=sharing)**
+| Workflow | File | Description |
+|----------|------|-------------|
+| **Vanilla RAG** | `RAG Workflow.json` | Ingestion + semantic-only AI Agent query pipeline |
+| **Hybrid RAG** | Export from your n8n canvas (Workflow 4) | BM25 + semantic parallel retrieval |
+
+**[Download RAG Workflow.json — Vanilla (Google Drive)](https://drive.google.com/file/d/18zXZqNQU4VsijJ3nZYlMTBY8gZXecLN5/view?usp=sharing)**
 
 ### How to import
 
@@ -151,10 +166,11 @@ Responses contain placeholder tokens like `{{Order Number}}` and `{{Website URL}
 │                                         ├── HF Embeddings    │
 │                                         └── Default Data     │
 │                                              Loader          │
+│  (Hybrid only) Code → Supabase insert into support_docs     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                   CHAT WORKFLOW (query)                      │
+│     VANILLA QUERY — Semantic Retrieval (Workflow 3)          │
 │                                                              │
 │  Google Form → Apps Script → ngrok → Webhook → AI Agent       │
 │               ├── Groq Chat Model                            │
@@ -162,6 +178,16 @@ Responses contain placeholder tokens like `{{Order Number}}` and `{{Website URL}
 │                        ├── HF Embeddings (same model)        │
 │                        └── Cohere Reranker                   │
 │  AI Agent → Code (parse JSON) → SMTP (email response)        │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│     HYBRID QUERY — BM25 + Semantic (Workflow 4)              │
+│                                                              │
+│  Webhook → Edit Fields (query, email)                        │
+│       ├── Branch A: HF Embedding → Pinecone /query           │
+│       └── Branch B: Supabase RPC search_support_docs         │
+│              → Merge → RRF Fusion → Cohere Rerank            │
+│              → Combine Context → LLM Chain (Groq) → SMTP     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -307,13 +333,64 @@ In the Pinecone console, open one vector. Metadata should look like:
 
 If you see `blobType`, `line`, or `source: blob`, the Default Data Loader is misconfigured — fix metadata and re-index.
 
+### Hybrid only — Supabase BM25 index
+
+For **Workflow 4 (Hybrid RAG)**, also upsert rows into Supabase so keyword search can run in parallel with Pinecone.
+
+1. In Supabase SQL Editor, create the table and search function:
+
+```sql
+create table if not exists support_docs (
+  doc_id text primary key,
+  category text,
+  intent text,
+  instruction text,
+  response text,
+  search_text text,
+  fts tsvector generated always as (to_tsvector('english', coalesce(search_text, ''))) stored
+);
+
+create index if not exists support_docs_fts_idx on support_docs using gin (fts);
+
+create or replace function search_support_docs(query_text text, match_count int default 10)
+returns table (
+  doc_id text,
+  category text,
+  intent text,
+  instruction text,
+  response text,
+  search_text text,
+  rank real
+)
+language sql stable
+as $$
+  select
+    doc_id, category, intent, instruction, response, search_text,
+    ts_rank(fts, websearch_to_tsquery('english', query_text)) as rank
+  from support_docs
+  where fts @@ websearch_to_tsquery('english', query_text)
+  order by rank desc
+  limit match_count;
+$$;
+```
+
+2. After the Code node in Workflow 1, add a **Supabase** node (or extend the Code node to output both Pinecone and Supabase fields):
+
+| Supabase field | Source |
+|----------------|--------|
+| `doc_id` | `={{ $json.metadata.category }}_{{ $json.metadata.intent }}_{{ $runIndex }}` |
+| `search_text` | Same as `pageContent` (category + intent + question) |
+| `response`, `category`, `intent`, `instruction` | From metadata |
+
+3. Supabase credential **Host** must be `https://YOUR-PROJECT.supabase.co` — do **not** append `/rest/v1/`.
+
 ---
 
-## Workflow 3 — RAG Chat Pipeline
+## Workflow 3 — Vanilla RAG with Semantic Retrieval
 
-This workflow answers user questions by searching Pinecone and generating a response with Groq.
+This workflow answers user questions using **semantic search only** — Pinecone vector similarity via the LangChain **AI Agent** retrieve-as-tool pattern, then Groq for generation.
 
-![RAG and Chat workflow — Google Form, AI Agent, Code, and SMTP email response](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/rag.png)
+![Vanilla RAG — Google Form, AI Agent, Pinecone semantic retrieval, and SMTP email](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/rag.png)
 
 ### Step 8: Webhook Trigger (Google Forms)
 
@@ -667,7 +744,7 @@ After a successful run (Google Form → AI Agent → Code → SMTP), the user re
 
 The email shows the original **Query**, the AI-generated **Response** (grounded in Pinecone retrieval), and the **Customer Support Team** sign-off. The footer `This email was sent automatically with n8n` is added by n8n when using the SMTP node.
 
-### Canvas Summary
+### Canvas Summary (Vanilla)
 
 ```
 Google Form → Apps Script → ngrok → Webhook → AI Agent
@@ -681,6 +758,329 @@ Google Form → Apps Script → ngrok → Webhook → AI Agent
                                         ↓
                                    SMTP (email response)
 ```
+
+---
+
+## Workflow 4 — Hybrid RAG (BM25 + Semantic)
+
+This workflow improves retrieval by running **two searches in parallel** and fusing the results:
+
+- **Branch A (Semantic)** — embed the query with Hugging Face, query Pinecone by vector similarity
+- **Branch B (BM25)** — call Supabase `search_support_docs()` for PostgreSQL full-text search
+
+Results are merged with **Reciprocal Rank Fusion (RRF)**, reranked with **Cohere**, collapsed into one context block, and passed to a **Basic LLM Chain** (Groq) instead of an AI Agent.
+
+![Hybrid RAG pipeline — parallel Pinecone + Supabase, RRF, Cohere rerank, Groq LLM Chain, SMTP](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/rag-hybrid-pipeline.png)
+
+### Prerequisites (hybrid)
+
+- Pinecone index populated (Workflow 2)
+- Supabase `support_docs` table + `search_support_docs` function (see [Hybrid only — Supabase BM25 index](#hybrid-only--supabase-bm25-index))
+- Same API keys as vanilla, plus Supabase service role key
+
+### Step 17: Webhook + Edit Fields
+
+Reuse the same **Google Form → Apps Script → ngrok → Webhook** setup from [Step 8](#step-8-webhook-trigger-google-forms). After the Webhook, add an **Edit Fields** (Set) node to normalize `query` and `email` for downstream branches.
+
+![Hybrid — Webhook trigger and Edit Fields node](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/webhook-edit-fields.png)
+
+| Field | Expression (adjust to match your form titles) |
+|-------|-----------------------------------------------|
+| `query` | `={{ $json.body.Question }}` |
+| `email` | `={{ $json.body.Email }}` |
+
+Inspect the Webhook output after a test submission — use `$json.Question` instead of `$json.body.Question` if fields are at the root.
+
+### Step 18: Branch A — Semantic (Pinecone)
+
+From **Edit Fields**, connect **Branch A**: embed the query, then query Pinecone's REST API directly (HTTP Request nodes give full control over the 768-dim vector).
+
+![Hybrid Branch A — Hugging Face embedding and Pinecone vector query](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/branch-a-semantic.png)
+
+#### 18.1 — Hugging Face Embedding (HTTP Request)
+
+| Setting | Value |
+|---------|--------|
+| **Method** | POST |
+| **URL** | `https://router.huggingface.co/hf-inference/models/sentence-transformers/all-mpnet-base-v2/pipeline/feature-extraction` |
+| **Authentication** | Header Auth — `Authorization: Bearer YOUR_HF_TOKEN` |
+| **Send Body** | ON |
+| **Body Content Type** | JSON |
+| **JSON body** | `={{ JSON.stringify({ inputs: $('Edit Fields').first().json.query }) }}` |
+
+> Do **not** use the deprecated `api-inference.huggingface.co` URL — it returns errors. **Send Body** must be ON or the request sends invalid JSON.
+
+#### 18.2 — Build Pinecone query body (Code)
+
+Add a **Code** node to extract the 768-dimensional embedding array from the HF response and build the Pinecone `/query` payload:
+
+```javascript
+const embedding = $input.first().json;
+const vector = Array.isArray(embedding[0]) ? embedding[0] : embedding;
+
+return [{
+  json: {
+    vector,
+    topK: 10,
+    includeMetadata: true,
+    namespace: '__default__'
+  }
+}];
+```
+
+#### 18.3 — Pinecone query (HTTP Request)
+
+| Setting | Value |
+|---------|--------|
+| **Method** | POST |
+| **URL** | `https://YOUR-INDEX-HOST/query` |
+| **Authentication** | Header — `Api-Key: YOUR_PINECONE_KEY` |
+| **Send Body** | ON |
+| **Body** | `={{ JSON.stringify({ vector: $json.vector, topK: $json.topK, includeMetadata: true, namespace: $json.namespace }) }}` |
+
+Pinecone returns `{ matches: [ { id, score, metadata }, ... ] }`.
+
+### Step 19: Branch B — BM25 (Supabase)
+
+From **Edit Fields**, connect **Branch B**: call the Supabase RPC function for full-text search.
+
+![Hybrid Branch B — Supabase RPC search_support_docs](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/branch-b-bm25.png)
+
+Add a **Supabase** node:
+
+| Setting | Value |
+|---------|--------|
+| **Resource** | Database |
+| **Operation** | Execute RPC |
+| **Function** | `search_support_docs` |
+| **Send Body** | **ON** |
+| **Parameters** | `query_text`: `={{ $('Edit Fields').first().json.query }}`, `match_count`: `10` |
+
+Common errors:
+
+| Error | Fix |
+|-------|-----|
+| `PGRST202` — function not found | Create `search_support_docs` in Supabase SQL Editor (see ingestion section) |
+| 404 without parameters | Turn **Send Body** ON and pass `query_text` + `match_count` |
+
+Supabase returns one item per matched row (`doc_id`, `response`, `rank`, etc.).
+
+### Step 20: Merge, RRF, Cohere rerank, Combine Context
+
+Connect both branches into a **Merge** node (mode: **Append**), then fuse and rerank.
+
+![Hybrid — Merge, RRF fusion, Cohere rerank, Combine Context](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/merge-rrf-cohere-combine.png)
+
+#### 20.1 — RRF Fusion (Code)
+
+Add a **Code** node (e.g. named `Code in JavaScript1`) to combine Pinecone matches and Supabase rows with Reciprocal Rank Fusion:
+
+```javascript
+const K = 60;
+const scores = new Map();
+
+function normalizeId(id) {
+  if (!id) return '';
+  return String(id).replace(/^[\t\n=]+/, '').trim();
+}
+
+function addResult(id, rank, text, metadata) {
+  const key = normalizeId(id);
+  if (!key) return;
+  const rrf = 1 / (K + rank);
+  const existing = scores.get(key) || { score: 0, text: '', metadata: {} };
+  existing.score += rrf;
+  if (text) existing.text = text;
+  if (metadata) existing.metadata = { ...existing.metadata, ...metadata };
+  scores.set(key, existing);
+}
+
+// Pinecone branch: one item with matches[]
+const pineconeItem = $('Pinecone Query').first().json; // rename to your HTTP node name
+(pineconeItem.matches || []).forEach((m, i) => {
+  addResult(
+    m.metadata?.id || m.id,
+    i + 1,
+    m.metadata?.response || '',
+    m.metadata || {}
+  );
+});
+
+// Supabase branch: multiple flat items
+$('Supabase').all().forEach((item, i) => {
+  const row = item.json;
+  addResult(row.doc_id, i + 1, row.response, row);
+});
+
+const fused = [...scores.entries()]
+  .sort((a, b) => b[1].score - a[1].score)
+  .slice(0, 10)
+  .map(([id, data]) => ({
+    json: {
+      id,
+      rrf_score: data.score,
+      text: data.text,
+      metadata: data.metadata
+    }
+  }));
+
+return fused;
+```
+
+> Adjust `$('Pinecone Query')` and `$('Supabase')` to match your actual node names. Normalize IDs to handle legacy data with leading `=` or tab/newline characters.
+
+#### 20.2 — Cohere Rerank (HTTP Request)
+
+| Setting | Value |
+|---------|--------|
+| **Method** | POST |
+| **URL** | `https://api.cohere.com/v1/rerank` |
+| **Headers** | `Authorization: Bearer YOUR_COHERE_KEY` |
+| **Send Body** | ON |
+| **JSON body** | See expression below |
+
+Build the documents array from the RRF node — use `$('Code in JavaScript1').all()`, not `$input`:
+
+```javascript
+={{
+  JSON.stringify({
+    model: 'rerank-english-v3.0',
+    query: $('Edit Fields').first().json.query,
+    documents: $('Code in JavaScript1').all().map(i => i.json.text),
+    top_n: 3
+  })
+}}
+```
+
+Avoid `==` in n8n expressions (use single `=`).
+
+#### 20.3 — Map reranked results (Code)
+
+Map Cohere's `results` array back to your document metadata:
+
+```javascript
+const reranked = $input.first().json.results || [];
+const sources = $('Code in JavaScript1').all();
+
+return reranked.map(r => ({
+  json: {
+    ...sources[r.index].json,
+    cohere_score: r.relevance_score
+  }
+}));
+```
+
+#### 20.4 — Combine Context (Code)
+
+The LLM Chain runs **once per input item**. Collapse the top reranked docs into **one item** so Groq is called only once:
+
+```javascript
+const docs = $input.all();
+const query = $('Edit Fields').first().json.query;
+const email = $('Edit Fields').first().json.email;
+
+const context = docs
+  .map((d, i) => `[${i + 1}] ${d.json.text}`)
+  .join('\n\n');
+
+return [{
+  json: {
+    query,
+    email,
+    context,
+    doc_count: docs.length
+  }
+}];
+```
+
+### Step 21: LLM Chain (Groq)
+
+Add a **Basic LLM Chain** connected to **Groq Chat Model**.
+
+![Hybrid — Basic LLM Chain with Groq chat model](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/llm-chain-grok.png)
+
+| Setting | Value |
+|---------|--------|
+| **Prompt** | See template below |
+| **Chat Model** | Groq — `openai/gpt-oss-120b` or `llama-3.3-70b-versatile` |
+
+**Prompt template:**
+
+```
+You are a customer support assistant.
+
+Answer the user's question using ONLY the support responses below.
+If the context does not contain the answer, say you don't know and offer human support.
+Do not invent policies, phone numbers, or URLs.
+
+User question: {{ $json.query }}
+
+Support context:
+{{ $json.context }}
+
+Return your answer as JSON with exactly these keys:
+{"Email":"<user email>","Query":"<user question>","Output":"<your answer>"}
+```
+
+Connect **Combine Context** directly to the LLM Chain — not the three separate reranked items.
+
+### Step 22: Extract answer + SMTP email
+
+Add a **Code** node to parse the LLM output, then **Send Email (SMTP)** — same pattern as vanilla Workflow 3.
+
+![Hybrid — Extract Answer Code node and SMTP email](https://raw.githubusercontent.com/AliHassanSandhu/Rag-n8n/main/screenshots/hybrid/format-send-email.png)
+
+**Extract Answer (Code):**
+
+```javascript
+const raw = $input.first().json.text || $input.first().json.output || '';
+const email = $('Combine Context').first().json.email;
+const query = $('Combine Context').first().json.query;
+
+// Pull JSON from LLM output (handles markdown fences)
+const match = raw.match(/\{[\s\S]*"Output"[\s\S]*\}/);
+let answer = raw;
+if (match) {
+  try {
+    const parsed = JSON.parse(match[0]);
+    answer = parsed.Output || raw;
+  } catch (e) {
+    answer = raw;
+  }
+}
+
+return [{
+  json: { email, query, answer }
+}];
+```
+
+Reuse the SMTP HTML template from [Step 16](#step-16-smtp--email-the-support-response).
+
+### Canvas Summary (Hybrid)
+
+```
+Webhook → Edit Fields (query, email)
+    ├── Branch A: HF Embedding → Build Pinecone Body → Pinecone /query
+    └── Branch B: Supabase RPC search_support_docs
+              → Merge (Append)
+              → RRF Fusion (Code)
+              → Cohere Rerank (HTTP)
+              → Map Reranked (Code)
+              → Combine Context (Code, 1 item)
+              → LLM Chain (Groq)
+              → Extract Answer (Code)
+              → SMTP (email)
+```
+
+### Vanilla vs Hybrid — when to use which
+
+| | Vanilla RAG | Hybrid RAG |
+|---|-------------|------------|
+| **Retrieval** | Pinecone semantic only | Pinecone + Supabase BM25 |
+| **Fusion** | Cohere rerank inside Pinecone tool | RRF then Cohere rerank |
+| **Generation** | AI Agent (tool-calling) | Basic LLM Chain (fixed context) |
+| **Complexity** | Lower — LangChain handles retrieve | Higher — manual HTTP + merge |
+| **Best for** | Prototyping, natural-language questions | Order IDs, exact keywords, policy terms |
 
 ---
 
@@ -740,7 +1140,7 @@ https://borrowing-suds-unharmed.ngrok-free.dev
 3. Confirm ~50 vectors in Pinecone with correct metadata (including `response`).
 4. Remove Limit, run full dataset with Split in Batches.
 
-### Query
+### Query — Vanilla RAG
 
 **Option 1 — Google Form:** Submit the form with a question like *How do I cancel my order?* (see [Step 8.6 — Test the webhook end-to-end](#86--test-the-webhook-end-to-end)).
 
@@ -754,6 +1154,27 @@ https://borrowing-suds-unharmed.ngrok-free.dev
 ```
 
 **Option 3 — Verify email:** After the run completes, check the SMTP node execution and the recipient inbox for the HTML email with query and answer.
+
+### Query — Hybrid RAG
+
+1. Confirm Supabase has rows: `select count(*) from support_docs;`
+2. Test Branch B alone — run Supabase RPC with `query_text = 'cancel order'`.
+3. Test Branch A — HF embedding returns a 768-length array; Pinecone `/query` returns `matches`.
+4. Submit the same Google Form / curl payload as vanilla.
+5. In **Executions**, verify: Merge receives both branches → RRF outputs ~10 fused docs → Cohere returns 3 → **Combine Context** outputs **1 item** → LLM Chain runs once → email sent.
+
+If the LLM Chain runs **3 times**, you connected reranked docs directly instead of **Combine Context**.
+
+**Expected hybrid context** — top reranked support responses joined in `Combine Context`:
+
+```json
+{
+  "query": "How do I cancel my order?",
+  "email": "user@example.com",
+  "context": "[1] To cancel your purchase...\n\n[2] ...",
+  "doc_count": 3
+}
+```
 
 **Expected retrieval** — documents with full metadata:
 
@@ -817,6 +1238,30 @@ https://borrowing-suds-unharmed.ngrok-free.dev
 
 **Fix:** Use **Split in Batches** (100–200) and test with **Limit 500** first.
 
+### Hugging Face embedding URL returns 404 / model not found
+
+**Fix:** Use the router URL: `https://router.huggingface.co/hf-inference/models/sentence-transformers/all-mpnet-base-v2/pipeline/feature-extraction`. Turn **Send Body** ON with `{ "inputs": "your query" }`.
+
+### Pinecone query returns empty or invalid vector
+
+**Fix:** The vector must be a JSON **array** of 768 floats, not a string. Use a Code node to extract `embedding[0]` from the HF response before calling `/query`.
+
+### Supabase RPC `PGRST202` or 404
+
+**Fix:** Create the `search_support_docs` function in Supabase. In the n8n Supabase node, enable **Send Body** and pass `query_text` and `match_count`.
+
+### Hybrid LLM Chain runs multiple times (3 outputs)
+
+**Fix:** Add a **Combine Context** Code node after reranking to merge top docs into a single item before the LLM Chain.
+
+### Cohere rerank receives wrong documents
+
+**Fix:** Reference `$('Code in JavaScript1').all()` (your RRF node name), not `$input`. Use `.first()` / `.all()` — not `.item`.
+
+### IDs in RRF show `\t\n=ORDER_...` prefix
+
+**Fix:** Normalize IDs in the RRF Code node (`replace(/^[\t\n=]+/, '')`). Re-ingest data without `==` double-equals in n8n expressions to prevent `=` prefixes in stored metadata.
+
 ### Local file access denied (n8n 2.x)
 
 **Fix:** Set environment variable before starting n8n:
@@ -833,6 +1278,7 @@ n8n start
 | Component | Technology | Key |
 |-----------|------------|-----|
 | Vector DB | Pinecone (768 dim, cosine) | `pinecone_api_key` |
+| BM25 / FTS | Supabase PostgreSQL (`support_docs`) | Supabase service role key |
 | Embeddings | HF `sentence-transformers/all-mpnet-base-v2` | `huggingface_api_key` |
 | Chat LLM | Groq `openai/gpt-oss-120b` | `groq_api_key` |
 | Reranker | Cohere | `cohere_api_key` |
@@ -840,14 +1286,17 @@ n8n start
 
 | Workflow | Nodes |
 |----------|-------|
-| **Upsert** | Form → Extract CSV → Code → Pinecone Insert + HF Embeddings + Default Data Loader |
-| **Query** | Google Form → Apps Script → ngrok → Webhook → AI Agent → Code (parse) → SMTP email + Groq + Pinecone + HF Embeddings + Cohere |
+| **Upsert** | Form → Extract CSV → Code → Pinecone Insert + HF Embeddings + Default Data Loader (+ Supabase for hybrid) |
+| **Vanilla query** | Google Form → Apps Script → ngrok → Webhook → AI Agent → Code (parse) → SMTP + Groq + Pinecone + HF Embeddings + Cohere |
+| **Hybrid query** | Webhook → Edit Fields → [Pinecone HTTP + Supabase RPC] → Merge → RRF → Cohere → Combine Context → LLM Chain (Groq) → Code → SMTP |
 
 ---
 
 ## Next Steps
 
 - Replace `{{Order Number}}` and other placeholders with real company values in the Code node
-- Add **Window Buffer Memory** for multi-turn support conversations
+- Add **Window Buffer Memory** for multi-turn support conversations (vanilla AI Agent)
 - Monitor Pinecone vector count and re-run ingestion when the CSV is updated
 - Consider **Question and Answer Chain** if the AI Agent inconsistently calls the Pinecone tool
+- Tune hybrid **RRF K** (default 60) and Cohere **top_n** (default 3) for your query mix
+- Export Workflow 4 as JSON and add a download link alongside `RAG Workflow.json`

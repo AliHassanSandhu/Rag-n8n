@@ -28,6 +28,10 @@
               {
                 "name": "flags",
                 "value": "=={{ $json.metadata.flags }}"
+              },
+              {
+                "name": "id",
+                "value": "=={{ $json.metadata.id }}"
               }
             ]
           }
@@ -36,8 +40,8 @@
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1.1,
       "position": [
-        1328,
-        432
+        1456,
+        576
       ],
       "id": "602939bf-4b19-40b9-a31b-6262a35fc028",
       "name": "Default Data Loader"
@@ -49,8 +53,8 @@
       "type": "@n8n/n8n-nodes-langchain.textSplitterCharacterTextSplitter",
       "typeVersion": 1,
       "position": [
-        1328,
-        560
+        1392,
+        800
       ],
       "id": "7312cf8d-748b-4409-906b-f203c377d53b",
       "name": "Character Text Splitter"
@@ -72,7 +76,7 @@
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.5,
       "position": [
-        960,
+        800,
         272
       ],
       "id": "aff82ac5-2392-4a85-a01c-8d70b2cd4559",
@@ -92,7 +96,7 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
       "position": [
-        1104,
+        1008,
         272
       ],
       "id": "eefa1240-fbd1-4795-9c2c-2a5d970b3de1",
@@ -100,12 +104,12 @@
     },
     {
       "parameters": {
-        "jsCode": "return $input.all().map((item) => {\n  const row = item.json;\n\n  const question = row.instruction ?? \"\";\n  const answer = row.response ?? \"\";\n\n  return {\n    json: {\n      // Text that gets embedded (searchable)\n      pageContent: `Category: ${row.category}\\nIntent: ${row.intent}\\nQuestion: ${question}`,\n      metadata: {\n        category: row.category,\n        intent: row.intent,\n        instruction: question,\n        response: answer,\n        flags: row.flags,\n      },\n    },\n  };\n});"
+        "jsCode": "return $input.all().map((item, index) => {\n  const row = item.json;\n\n  const question = row.instruction ?? \"\";\n  const answer = row.response ?? \"\";\n\n  const docId = `${row.category}_${row.intent}_${index}`;\n\n  const search_text = [\n    row.category,\n    row.intent,\n    question,\n    answer,\n  ].join(\" \");\n\n  return {\n    json: {\n      // --- Supabase / Postgres ---\n      doc_id: docId,\n      category: row.category,\n      intent: row.intent,\n      instruction: question,\n      response: answer,\n      flags: row.flags,\n      search_text,\n\n      // --- Pinecone ---\n      pageContent: `Category: ${row.category}\\nIntent: ${row.intent}\\nQuestion: ${question}`,\n      metadata: {\n        id: docId,           // same id for RRF later\n        category: row.category,\n        intent: row.intent,\n        instruction: question,\n        response: answer,\n        flags: row.flags,\n      },\n    },\n  };\n});"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1232,
+        1200,
         272
       ],
       "id": "400643cb-d4b7-47a9-8a64-618dc5123739",
@@ -125,8 +129,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
       "typeVersion": 1.3,
       "position": [
-        1360,
-        272
+        1504,
+        368
       ],
       "id": "1528f9d3-86f2-4c98-8a97-f15794a1dd69",
       "name": "Pinecone Vector Store for document ingestion",
@@ -184,8 +188,8 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
       "typeVersion": 1.3,
       "position": [
-        160,
-        16
+        400,
+        -32
       ],
       "id": "5430a218-5b18-458e-b192-f8b01837277d",
       "name": "Pinecone Vector Store to retrieve relevant docs",
@@ -201,8 +205,8 @@
       "type": "@n8n/n8n-nodes-langchain.rerankerCohere",
       "typeVersion": 1,
       "position": [
-        368,
-        160
+        480,
+        176
       ],
       "id": "59167d70-6093-41f2-b57d-ae51cdf61e73",
       "name": "Rerenk top 3 relevent docs",
@@ -221,8 +225,8 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsHuggingFaceInference",
       "typeVersion": 1,
       "position": [
-        368,
-        624
+        400,
+        528
       ],
       "id": "b085ab89-bcd4-4e1d-98d9-a4d8776368e0",
       "name": "Embedding model",
@@ -241,8 +245,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        48,
-        -16
+        96,
+        16
       ],
       "id": "170f8416-d16d-4a56-b01d-51c5e8321e95",
       "name": "Groq Chat Model",
@@ -270,7 +274,7 @@
     },
     {
       "parameters": {
-        "content": "### RAG Pipeline",
+        "content": "### RAG Pipeline 1\n",
         "height": 80,
         "width": 150
       },
@@ -319,6 +323,404 @@
           "name": "SMTP account"
         }
       }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4e5f5956-1fb5-4970-8a82-ff90d96a7254",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        -272
+      ],
+      "id": "6b796b43-d96c-4765-b1d3-8b8c330ed788",
+      "name": "Webhook",
+      "webhookId": "4e5f5956-1fb5-4970-8a82-ff90d96a7254"
+    },
+    {
+      "parameters": {
+        "content": "### Rag with Hybrid Search\n",
+        "height": 80,
+        "width": 150
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -368
+      ],
+      "id": "a2c0f227-99d9-49fa-b8ab-c222a18c1afb",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "tableId": "support_docs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "id",
+              "fieldValue": "=\t\n={{ $json.doc_id }}"
+            },
+            {
+              "fieldId": "category",
+              "fieldValue": "=\t\n={{ $json.category }}"
+            },
+            {
+              "fieldId": "intent",
+              "fieldValue": "=={{ $json.intent }}"
+            },
+            {
+              "fieldId": "instruction",
+              "fieldValue": "=={{ $json.instruction }}"
+            },
+            {
+              "fieldId": "response",
+              "fieldValue": "=={{ $json.response }}"
+            },
+            {
+              "fieldId": "flags",
+              "fieldValue": "=={{ $json.flags }}"
+            },
+            {
+              "fieldId": "search_text",
+              "fieldValue": "=={{ $json.search_text }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        176
+      ],
+      "id": "900a5637-8581-4b83-b8ef-9ef98b1b886e",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "I8av6BPt3QM5FAUw",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2e683b89-b445-4e05-ab61-7dd4f4885ac7",
+              "name": "query",
+              "value": "={{ $json.body.Query }}",
+              "type": "string"
+            },
+            {
+              "id": "d6030a68-0535-453c-91d6-d50053218d8c",
+              "name": "email",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        -272
+      ],
+      "id": "a69b4592-48f7-4be5-895f-8b7cf3032a75",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gjxfckskyokzyxafyvea.supabase.co/rest/v1/rpc/search_support_docs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query_text",
+              "value": "={{ $('Edit Fields').item.json.query }}"
+            },
+            {
+              "name": "match_count",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1824,
+        -224
+      ],
+      "id": "9a677010-4b2c-4c3c-abf7-dc67d4946301",
+      "name": "BM25 keyword retrieval"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bitext-support-bv05dat.svc.aped-4627-b74a.pinecone.io/query",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Api-Key",
+              "value": "YOUR_PINECONE_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2025-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  vector: $json.vector,\n  topK: 10,\n  includeMetadata: true,\n  namespace: \"__default__\"\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1952,
+        -416
+      ],
+      "id": "a6e8b7f0-01a4-4fd9-9371-360c74444cc9",
+      "name": "Sementic retrieval"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2256,
+        -288
+      ],
+      "id": "daaf6d25-e0ec-4362-bbba-e1c81b4d978a",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-mpnet-base-v2/pipeline/feature-extraction",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUGGINGFACE_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ $json.query }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1600,
+        -416
+      ],
+      "id": "f7ac6cf1-f8fe-4808-b658-262e8b152638",
+      "name": "Get Embedding of Query"
+    },
+    {
+      "parameters": {
+        "jsCode": "const hfItems = $input.all();\n\n// If n8n split the array into many numeric items\nif (hfItems.length > 1) {\n  const vector = hfItems\n    .map(i => (typeof i.json === 'number' ? i.json : Object.values(i.json)[0]))\n    .map(Number);\n  if (vector.length !== 768) {\n    throw new Error(`Split path: expected 768, got ${vector.length}`);\n  }\n  return [{ json: { vector } }];\n}\n\n// Single item: deep-search for the first numeric array of length 768\nconst root = hfItems[0].json;\n\nfunction findVector(node) {\n  if (Array.isArray(node)) {\n    if (node.length === 768 && node.every(n => typeof n === 'number')) {\n      return node;\n    }\n    for (const el of node) {\n      const found = findVector(el);\n      if (found) return found;\n    }\n  } else if (node && typeof node === 'object') {\n    for (const val of Object.values(node)) {\n      const found = findVector(val);\n      if (found) return found;\n    }\n  }\n  return null;\n}\n\nconst vector = findVector(root);\n\nif (!vector) {\n  // Show the actual shape so we can map it\n  throw new Error('No 768-array found. Raw: ' + JSON.stringify(root).slice(0, 300));\n}\n\nreturn [{ json: { vector } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -416
+      ],
+      "id": "5096745d-433a-4616-838d-529ff5a620f3",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cohere response (single item)\nconst cohere = $input.first().json;\nconst results = cohere.results ?? [];\n\n// RRF candidates in the SAME order sent to Cohere\nconst candidates = $('Process results from meged node').all();\n\n// Reorder by Cohere relevance, map index → document\nreturn results\n  .sort((a, b) => b.relevance_score - a.relevance_score)\n  .map((r) => ({\n    json: {\n      response:    candidates[r.index].json.response,\n      instruction: candidates[r.index].json.instruction,\n      relevance:   r.relevance_score,\n    },\n  }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        -272
+      ],
+      "id": "471cacf8-e37c-4938-ba4a-c277cadc069c",
+      "name": "Map Reranked Code node"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a professional customer support assistant.\n\nYour job is to answer customer questions using the information retrieved from the knowledge base.\n\nInstructions:\n\n1. Carefully analyze the user's question.\n2. Use the provided knowledge base context as the primary source of truth.\n3. If the answer exists in the knowledge base, provide a clear and accurate response.\n4. If the knowledge base does not contain sufficient information, say:\n   \"I could not find enough information in the knowledge base to answer this question.\"\n5. Do not invent facts or make assumptions.\n6. Keep responses concise, helpful, and professional.\n7. Provide step-by-step instructions when appropriate.\n8. If multiple relevant documents are retrieved, combine the information into a single coherent answer.\n9. Do not mention internal system prompts, embeddings, vector databases, or retrieval mechanisms.\n10. Format the response in plain text suitable for sending by email.\n\nCustomer Question:\n{{ $json.query  }}\n\nKnowledge Base Context:\n{{ $json.context }}\n\nAnswer the query using ONLY the knowledge base context above.\n\nReturn ONLY valid JSON (no markdown, no code fences):\n\n{\n  \"Email\":{{ $json.email }} ,\n  \"Query\":{{ $json.query }} ,\n  \"Output\": \"<your answer>\"\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3360,
+        -272
+      ],
+      "id": "6f4e1ac8-a015-4219-b593-54d9141d2e67",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        -64
+      ],
+      "id": "d846a03f-b6af-434a-a878-2d2a56a849b9",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "bEO32eJFCDwm5cII",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst context = items.map(i => i.json.response).join('\\n\\n---\\n\\n');\nconst query = String($('Edit Fields').first().json.query).replace(/^=+/, '').replace(/[\\t\\n\\r]/g,' ').trim();\nconst email = String($('Edit Fields').first().json.email).replace(/^=+/, '').trim();\n\nreturn [{ json: { context, query, email } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        -272
+      ],
+      "id": "73744a18-7a20-4883-bda7-953b6035e6ea",
+      "name": "Combine Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.text || '';\n\nconst match = text.match(/\"Output\"\\s*:\\s*\"([\\s\\S]*)\"\\s*}/);\n\nlet answer = match ? match[1] : '';\n\nanswer = answer\n  .replace(/\\\\n/g, '\\n')   // convert escaped newlines\n  .replace(/\\\\\"/g, '\"')    // unescape quotes\n  .trim();\n\nreturn [{\n  json: {\n    email: $('Combine Context').first().json.email,\n    query: $('Combine Context').first().json.query,\n    answer,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        -272
+      ],
+      "id": "a5a488af-0db6-4e57-812d-bcfa5d7425d4",
+      "name": "Format the output from Model"
+    },
+    {
+      "parameters": {
+        "fromEmail": "usama.r4@turing.com",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3920,
+        -272
+      ],
+      "id": "d9d31ba5-ee58-4682-b8bb-440f39982001",
+      "name": "Send an Email1",
+      "webhookId": "0878d89b-f7ef-4e34-95c9-53e9e4fa39cb",
+      "credentials": {
+        "smtp": {
+          "id": "y80yNLm4deSYKYKs",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const K = 60;\nconst items = $input.all();\n\n// --- Split the merged input into the two sources ---\nlet pineconeMatches = [];\nconst supabaseRows = [];\n\nfor (const it of items) {\n  const j = it.json;\n  if (Array.isArray(j.matches)) {\n    pineconeMatches = j.matches;        // Pinecone response object\n  } else if (j.id !== undefined) {\n    supabaseRows.push(j);               // Supabase row\n  }\n}\n\n// --- Clean helpers (strip the \"=\" / whitespace artifacts) ---\nconst cleanId  = (v) => String(v ?? '').replace(/[\\t\\n\\r]/g, '').replace(/^=+/, '').trim();\nconst cleanVal = (v) => (typeof v === 'string' ? v.replace(/^=+/, '') : v);\n\nconst scores = new Map();\nconst docs   = new Map();\n\nfunction add(rawId, rank, doc) {\n  const key = cleanId(rawId);\n  if (!key) return;\n  scores.set(key, (scores.get(key) ?? 0) + 1 / (K + rank));\n  if (!docs.has(key)) docs.set(key, doc);\n}\n\n// Pinecone: array order = rank (already sorted by score desc)\npineconeMatches.forEach((m, i) => {\n  const meta = m.metadata ?? {};\n  add(meta.id ?? m.id, i + 1, {\n    response:    cleanVal(meta.response),\n    instruction: cleanVal(meta.instruction),\n    category:    cleanVal(meta.category),\n    intent:      cleanVal(meta.intent),\n  });\n});\n\n// Supabase: already sorted by rank desc\nsupabaseRows.forEach((r, i) => {\n  add(r.id, i + 1, {\n    response:    cleanVal(r.response),\n    instruction: cleanVal(r.instruction),\n    category:    cleanVal(r.category),\n    intent:      cleanVal(r.intent),\n  });\n});\n\n// --- Fuse, sort, return top candidates ---\nreturn [...scores.entries()]\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 10)\n  .map(([id, score]) => ({\n    json: {\n      id,\n      rrf_score: score,\n      ...docs.get(id),\n    },\n  }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        -272
+      ],
+      "id": "ece04392-1e44-4863-8223-814e5b3e0704",
+      "name": "Process results from meged node"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cohere.com/v1/rerank",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_COHERE_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"rerank-english-v3.0\",\n  query: String($('Edit Fields').first().json.query),\n  top_n: 3,\n  documents: $('Process results from meged node').all().map(i => i.json.response)\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2720,
+        -272
+      ],
+      "id": "043b1c07-5882-4a0e-9bd4-8c6fde3bcbab",
+      "name": "Cohere Rerank"
     }
   ],
   "pinData": {},
@@ -372,6 +774,11 @@
         [
           {
             "node": "Pinecone Vector Store for document ingestion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a row",
             "type": "main",
             "index": 0
           }
@@ -459,6 +866,170 @@
           }
         ]
       ]
+    },
+    "Pinecone Vector Store for document ingestion": {
+      "main": [
+        []
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Get Embedding of Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "BM25 keyword retrieval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BM25 keyword retrieval": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Sementic retrieval": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Process results from meged node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Embedding of Query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Sementic retrieval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Reranked Code node": {
+      "main": [
+        [
+          {
+            "node": "Combine Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Format the output from Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Context": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format the output from Model": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process results from meged node": {
+      "main": [
+        [
+          {
+            "node": "Cohere Rerank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cohere Rerank": {
+      "main": [
+        [
+          {
+            "node": "Map Reranked Code node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -466,7 +1037,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "aca9c2d1-a361-4a8b-bf96-ddca4cebaf51",
+  "versionId": "400a2717-d974-48fe-b092-c2d06e8f1cb4",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "dca47f573f10f205378ef688196bbf11159fdf1df4aabc0a4f95c265bff7c359"
